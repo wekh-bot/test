@@ -2,7 +2,7 @@ name: Auto Update Nodes
 
 on:
   schedule:
-    - cron: "0 2 * * *"  # 每天北京时间10点执行
+    - cron: "0 2 * * *"  # 每天北京时间10点
   workflow_dispatch:
 
 jobs:
@@ -21,7 +21,7 @@ jobs:
           python-version: 3.x
 
       - name: Install dependencies
-        run: pip install aiohttp
+        run: pip install aiohttp requests
 
       - name: Run node collector
         run: python main.py
