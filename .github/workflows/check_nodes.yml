@@ -1,36 +1,36 @@
-name: Real Node Test (xray)
+name: Regular Update
 
 on:
   schedule:
-    - cron: "0 2 * * *"  # 每天运行（UTC 时间），可修改
-  workflow_dispatch:
+    - cron: "0 4 * * *" # Run everyday at 12am in Beijing time
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
+  update:
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y unzip curl
           python -m pip install --upgrade pip
-          python -m pip install aiohttp
+          pip install -r requirements.txt
 
-      - name: Run real test script
-        run: |
-          chmod +x main.py || true
-          python3 main.py
+      - name: Run SimpleScraper
+        run: scrapy crawl simple
 
-      - name: Commit results
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add v2ray.txt || true
-          git commit -m "Auto update real-tested nodes $(date '+%Y-%m-%d %H:%M:%S')" || echo "No changes"
-          git push
+      - name: Run DecryptScraper
+        run: scrapy crawl decrypt
+
+      - name: Git commit and push
+        uses: GuillaumeFalourd/git-commit-push@v1
+        with:
+          commit_message: "Regular update"
+          files: config.json README.md scrapy.log nodes/*
+          force: 1
+          empty: 1
