@@ -3,6 +3,7 @@ import asyncio
 import base64
 import re
 import os
+import time
 from datetime import datetime
 
 # -------------------------------
@@ -20,6 +21,7 @@ RESULT_FILE = os.path.join(OUTPUT_DIR, "result.txt")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+
 # -------------------------------
 # 工具函数
 # -------------------------------
@@ -27,7 +29,7 @@ def decode_base64_if_needed(text: str) -> str:
     """尝试解码 Base64 内容"""
     try:
         decoded = base64.b64decode(text).decode("utf-8", errors="ignore")
-        if "vmess" in decoded or "vless" in decoded:
+        if "vmess" in decoded or "vless" in decoded or "ss://" in decoded:
             return decoded
     except Exception:
         pass
@@ -51,20 +53,24 @@ async def fetch_text(session: aiohttp.ClientSession, url: str) -> str:
     return ""
 
 
-async def check_node(session: aiohttp.ClientSession, node: str) -> bool:
-    """简单检测节点是否能访问 Google"""
+async def check_node(session: aiohttp.ClientSession, node: str):
+    """检测节点可用性 + 测速"""
+    start = time.time()
     try:
-        async with session.get("https://www.google.com", proxy=node, timeout=5) as resp:
-            return resp.status == 200
+        async with session.get("https://www.google.com/generate_204", proxy=node, timeout=5) as resp:
+            if resp.status == 204:
+                delay = int((time.time() - start) * 1000)
+                return node, delay
     except Exception:
-        return False
+        pass
+    return None
 
 
 # -------------------------------
-# 主函数
+# 主逻辑
 # -------------------------------
 async def main():
-    print("[*] 正在从 GitHub 抓取公开节点订阅...")
+    print("[*] 正在从 GitHub 抓取订阅源...")
 
     async with aiohttp.ClientSession() as session:
         texts = await asyncio.gather(*[fetch_text(session, url) for url in SOURCES])
@@ -77,28 +83,32 @@ async def main():
     all_nodes = list(set(all_nodes))
     print(f"共提取到 {len(all_nodes)} 条节点，开始检测...")
 
-    results = []
+    available_nodes = []
     async with aiohttp.ClientSession() as session:
         tasks = [check_node(session, node) for node in all_nodes]
-        statuses = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks)
 
-        for node, status in zip(all_nodes, statuses):
-            results.append((node, "✅ 可用" if status else "❌ 不可用"))
+        for res in results:
+            if res:
+                available_nodes.append(res)
 
-    # 写入结果文件
+    # 按延迟排序
+    available_nodes.sort(key=lambda x: x[1])
+
+    # 输出结果
     with open(RESULT_FILE, "w", encoding="utf-8") as f:
         f.write(f"更新时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"共检测节点：{len(results)} 条\n\n")
-        for node, status in results:
-            f.write(f"{status} {node}\n")
+        f.write(f"检测总节点：{len(all_nodes)} 条，可用节点：{len(available_nodes)} 条\n")
+        f.write("---------------------------------------------\n")
+        for node, delay in available_nodes:
+            f.write(f"{node}  # 延迟: {delay}ms\n")
 
-    available = sum(1 for _, s in results if "✅" in s)
-    print(f"检测完成，可用节点：{available}/{len(results)}")
-    print(f"结果已保存：{RESULT_FILE}")
+    print(f"✅ 检测完成，可用节点：{len(available_nodes)}/{len(all_nodes)}")
+    print(f"结果保存至：{RESULT_FILE}")
+
+    if len(available_nodes) == 0:
+        print("⚠️ 未检测到可用节点，请检查源或代理检测逻辑。")
 
 
-# -------------------------------
-# 入口
-# -------------------------------
 if __name__ == "__main__":
     asyncio.run(main())
