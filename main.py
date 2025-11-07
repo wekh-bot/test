@@ -3,28 +3,33 @@ import asyncio
 import base64
 import re
 import os
-import time
 from datetime import datetime
+import logging
+from helpers import safe_get  # 如果没有 helpers.py，可直接改为 requests.get
 
-# -------------------------------
-# 配置部分
-# -------------------------------
+# -----------------------------------
+# 基本配置
+# -----------------------------------
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("collector")
+
 SOURCES = [
     "https://raw.githubusercontent.com/Pawdroid/Free-servers/main/sub",
     "https://raw.githubusercontent.com/ermaozi01/free_clash_vpn/main/subscribe/clash.yml",
-    "https://raw.githubusercontent.com/learnhard-cn/free_proxy_ss/main/clash/clash.provider.yaml",
-    "https://raw.githubusercontent.com/peasoft/NoMoreWalls/master/list.txt"
+    "https://raw.githubusercontent.com/freefq/free/master/v2",
+    "https://raw.githubusercontent.com/learnhard-cn/free_proxy_ss/main/free",
+    "https://raw.githubusercontent.com/peasoft/NoMoreWalls/master/list_raw.txt",
+    "https://raw.githubusercontent.com/mahdibland/ShadowsocksAggregator/master/sub/sub_merge.txt",
 ]
 
-OUTPUT_DIR = "output"
-RESULT_FILE = os.path.join(OUTPUT_DIR, "result.txt")
-
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+OUTPUT_V2RAY = "v2ray.txt"
+OUTPUT_CLASH = "clash.yaml"
 
 
-# -------------------------------
+# -----------------------------------
 # 工具函数
-# -------------------------------
+# -----------------------------------
 def decode_base64_if_needed(text: str) -> str:
     """尝试解码 Base64 内容"""
     try:
@@ -45,69 +50,65 @@ def extract_nodes(text: str) -> list:
 async def fetch_text(session: aiohttp.ClientSession, url: str) -> str:
     """异步获取文本"""
     try:
-        async with session.get(url, timeout=10) as resp:
+        async with session.get(url, timeout=15) as resp:
             if resp.status == 200:
+                logger.info(f"Fetched: {url}")
                 return await resp.text()
-    except Exception:
-        pass
+            else:
+                logger.warning(f"Failed {url} - HTTP {resp.status}")
+    except Exception as e:
+        logger.error(f"Error fetching {url}: {e}")
     return ""
 
 
-async def check_node(session: aiohttp.ClientSession, node: str):
-    """检测节点可用性 + 测速"""
-    start = time.time()
-    try:
-        async with session.get("https://www.google.com/generate_204", proxy=node, timeout=5) as resp:
-            if resp.status == 204:
-                delay = int((time.time() - start) * 1000)
-                return node, delay
-    except Exception:
-        pass
-    return None
-
-
-# -------------------------------
-# 主逻辑
-# -------------------------------
-async def main():
-    print("[*] 正在从 GitHub 抓取订阅源...")
-
+async def collect_nodes():
+    """抓取全部节点"""
     async with aiohttp.ClientSession() as session:
         texts = await asyncio.gather(*[fetch_text(session, url) for url in SOURCES])
 
     all_nodes = []
     for content in texts:
-        content = decode_base64_if_needed(content)
-        all_nodes.extend(extract_nodes(content))
+        decoded = decode_base64_if_needed(content)
+        all_nodes.extend(extract_nodes(decoded))
 
+    # 去重
     all_nodes = list(set(all_nodes))
-    print(f"共提取到 {len(all_nodes)} 条节点，开始检测...")
+    logger.info(f"共提取节点：{len(all_nodes)} 条")
+    return all_nodes
 
-    available_nodes = []
-    async with aiohttp.ClientSession() as session:
-        tasks = [check_node(session, node) for node in all_nodes]
-        results = await asyncio.gather(*tasks)
 
-        for res in results:
-            if res:
-                available_nodes.append(res)
+def convert_to_clash(nodes: list) -> str:
+    """生成简单 Clash YAML 配置"""
+    yaml_lines = [
+        "proxies:",
+    ]
+    for node in nodes:
+        yaml_lines.append(f"  - {node}")
+    return "\n".join(yaml_lines)
 
-    # 按延迟排序
-    available_nodes.sort(key=lambda x: x[1])
 
-    # 输出结果
-    with open(RESULT_FILE, "w", encoding="utf-8") as f:
-        f.write(f"更新时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"检测总节点：{len(all_nodes)} 条，可用节点：{len(available_nodes)} 条\n")
-        f.write("---------------------------------------------\n")
-        for node, delay in available_nodes:
-            f.write(f"{node}  # 延迟: {delay}ms\n")
+async def main():
+    logger.info("开始抓取节点订阅源...")
+    nodes = await collect_nodes()
 
-    print(f"✅ 检测完成，可用节点：{len(available_nodes)}/{len(all_nodes)}")
-    print(f"结果保存至：{RESULT_FILE}")
+    if not nodes:
+        logger.warning("未获取到任何节点，可能源失效")
+        return
 
-    if len(available_nodes) == 0:
-        print("⚠️ 未检测到可用节点，请检查源或代理检测逻辑。")
+    # 保存 V2Ray 格式
+    with open(OUTPUT_V2RAY, "w", encoding="utf-8") as f:
+        for node in nodes:
+            f.write(node.strip() + "\n")
+    logger.info(f"已保存：{OUTPUT_V2RAY}")
+
+    # 保存 Clash 格式
+    clash_content = convert_to_clash(nodes)
+    with open(OUTPUT_CLASH, "w", encoding="utf-8") as f:
+        f.write(f"# 更新时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(clash_content)
+    logger.info(f"已保存：{OUTPUT_CLASH}")
+
+    logger.info("任务完成。")
 
 
 if __name__ == "__main__":
