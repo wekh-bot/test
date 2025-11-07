@@ -3,7 +3,6 @@ import asyncio
 import base64
 import re
 import os
-import requests
 import json
 import time
 import ssl
