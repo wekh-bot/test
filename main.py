@@ -5,7 +5,9 @@ import re
 import os
 from datetime import datetime
 
-# 公开的免费节点订阅源（可自行增减）
+# -------------------------------
+# 配置部分
+# -------------------------------
 SOURCES = [
     "https://raw.githubusercontent.com/Pawdroid/Free-servers/main/sub",
     "https://raw.githubusercontent.com/ermaozi01/free_clash_vpn/main/subscribe/clash.yml",
@@ -18,7 +20,9 @@ RESULT_FILE = os.path.join(OUTPUT_DIR, "result.txt")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-
+# -------------------------------
+# 工具函数
+# -------------------------------
 def decode_base64_if_needed(text: str) -> str:
     """尝试解码 Base64 内容"""
     try:
@@ -37,27 +41,31 @@ def extract_nodes(text: str) -> list:
 
 
 async def fetch_text(session: aiohttp.ClientSession, url: str) -> str:
+    """异步获取文本"""
     try:
         async with session.get(url, timeout=10) as resp:
             if resp.status == 200:
                 return await resp.text()
     except Exception:
-        return ""
+        pass
     return ""
 
 
 async def check_node(session: aiohttp.ClientSession, node: str) -> bool:
-    """简单检测节点是否能成功访问 Google"""
+    """简单检测节点是否能访问 Google"""
     try:
-        proxy = node
-        async with session.get("https://www.google.com", proxy=proxy, timeout=5) as resp:
+        async with session.get("https://www.google.com", proxy=node, timeout=5) as resp:
             return resp.status == 200
     except Exception:
         return False
 
 
+# -------------------------------
+# 主函数
+# -------------------------------
 async def main():
-    print("[*] 开始抓取 GitHub 节点订阅源...")
+    print("[*] 正在从 GitHub 抓取公开节点订阅...")
+
     async with aiohttp.ClientSession() as session:
         texts = await asyncio.gather(*[fetch_text(session, url) for url in SOURCES])
 
@@ -89,5 +97,8 @@ async def main():
     print(f"结果已保存：{RESULT_FILE}")
 
 
+# -------------------------------
+# 入口
+# -------------------------------
 if __name__ == "__main__":
     asyncio.run(main())
