@@ -1,35 +1,36 @@
-name: Auto Update Nodes
+name: Real Node Test (xray)
 
 on:
   schedule:
-    - cron: "0 2 * * *"  # 每天北京时间10点执行
+    - cron: "0 2 * * *"  # 每天运行（UTC 时间），可修改
   workflow_dispatch:
 
 jobs:
-  update:
+  test:
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.x
-
       - name: Install dependencies
-        run: pip install aiohttp
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip curl
+          python -m pip install --upgrade pip
+          python -m pip install aiohttp
 
-      - name: Run node checker
-        run: python main.py
+      - name: Run real test script
+        run: |
+          chmod +x main.py || true
+          python3 main.py
 
-      - name: Commit and push results
+      - name: Commit results
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add v2ray.txt
-          git commit -m "Auto update available nodes $(date '+%Y-%m-%d %H:%M:%S')" || echo "No changes"
+          git add v2ray.txt || true
+          git commit -m "Auto update real-tested nodes $(date '+%Y-%m-%d %H:%M:%S')" || echo "No changes"
           git push
