@@ -1,22 +1,15 @@
-#!/usr/bin/env python3
 import asyncio
 import base64
 import json
-import logging
 import os
-import shutil
+import re
 import socket
-import subprocess
-import sys
-import tempfile
 import time
-from datetime import datetime
-from urllib.parse import urlparse
+import logging
 import aiohttp
+from urllib.parse import urlparse
 
-# -----------------------------------
 # 基本配置
-# -----------------------------------
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("node-checker")
@@ -30,51 +23,31 @@ SOURCES = [
 ]
 
 OUTPUT_V2RAY = "v2ray.txt"
-MAX_NODES = 20
-CONCURRENCY = 4  # 并发数
-XRAY_ZIP_URL = "https://github.com/xtls/xray-core/releases/latest/download/xray-linux-64.zip"
-XRAY_BIN = "./xray"  # 解压后放在这里
-CURL_TIMEOUT = 8  # curl 最大超时（秒）
-XRAY_START_WAIT = 0.8  # 启动 xray 后等待多少秒再测试（给 xray 建立监听时间）
-TMP_DIR = "tmp_xray"
-TEST_TARGET = "https://www.cloudflare.com/cdn-cgi/trace"  # 测试目标
+MAX_NODES = 20  # 只保存前20个节点
+CONCURRENCY = 200  # 并发数量（更高并发，速度更快）
+TIMEOUT = 5  # 单个节点连接超时（秒）
 
 
-# ---------------- utilities ----------------
-def ensure_xray():
-    """下载并解压 xray（只在本地或 CI 第一次运行时）"""
-    if os.path.exists(XRAY_BIN) and os.access(XRAY_BIN, os.X_OK):
-        return XRAY_BIN
+# 工具函数：解析节点
+def decode_base64_if_needed(text: str) -> str:
+    try:
+        decoded = base64.b64decode(text).decode("utf-8", errors="ignore")
+        if any(proto in decoded for proto in ["vmess", "vless", "ss://", "trojan://"]):
+            return decoded
+    except Exception:
+        pass
+    return text
 
-    os.makedirs("bin", exist_ok=True)
-    zip_path = "xray.zip"
-    # 下载 zip
-    print("Downloading xray...")
-    cmd = ["curl", "-L", XRAY_ZIP_URL, "-o", zip_path]
-    subprocess.check_call(cmd)
-    # 解压到 bin/
-    print("Unzipping...")
-    subprocess.check_call(["unzip", "-o", zip_path, "-d", "bin"])
-    # 寻找 xray 可执行文件
-    candidate = None
-    for root, _, files in os.walk("bin"):
-        for f in files:
-            if f == "xray" or f == "xray.exe":
-                candidate = os.path.join(root, f)
-                break
-        if candidate:
-            break
-    if not candidate:
-        raise RuntimeError("xray binary not found inside zip")
-    shutil.copy(candidate, XRAY_BIN)
-    os.chmod(XRAY_BIN, 0o755)
-    print("xray ready:", XRAY_BIN)
-    return XRAY_BIN
+
+def extract_nodes(text: str) -> list:
+    pattern = r"(vmess://[A-Za-z0-9+/=._-]+|vless://[^\s]+|ss://[^\s]+|trojan://[^\s]+)"
+    return re.findall(pattern, text)
 
 
 async def fetch_text(session, url):
+    """异步获取订阅源内容"""
     try:
-        async with session.get(url, timeout=20) as r:
+        async with session.get(url, timeout=15) as r:
             if r.status == 200:
                 return await r.text()
     except Exception:
@@ -82,22 +55,8 @@ async def fetch_text(session, url):
     return ""
 
 
-def decode_base64_if_needed(text: str) -> str:
-    try:
-        decoded = base64.b64decode(text).decode("utf-8", errors="ignore")
-        if any(proto in decoded for proto in ("vmess", "vless", "trojan", "ss://")):
-            return decoded
-    except Exception:
-        pass
-    return text
-
-
-def extract_nodes(text: str):
-    pattern = r"(vmess://[A-Za-z0-9+/=._-]+|vless://[^\s]+|ss://[^\s]+|trojan://[^\s]+)"
-    return re.findall(pattern, text)
-
-
 async def collect_all_nodes():
+    """抓取所有节点"""
     async with aiohttp.ClientSession() as session:
         tasks = [fetch_text(session, url) for url in SOURCES]
         texts = await asyncio.gather(*tasks)
@@ -110,251 +69,123 @@ async def collect_all_nodes():
     return nodes
 
 
-# ---------------- parse node -> xray outbound config ----------------
-def parse_vmess(node: str):
-    b64 = node[len("vmess://"):]
-    raw = base64.b64decode(b64 + '=' * (-len(b64) % 4))
-    j = json.loads(raw.decode(errors="ignore"))
-    return j
+# 解析节点
+def parse_host_port(node: str):
+    """解析节点获取 host 和 port"""
+    node = node.strip()
+    try:
+        if node.startswith("vmess://"):
+            b64 = node[len("vmess://"):]
+            raw = base64.b64decode(b64 + '=' * (-len(b64) % 4))
+            j = json.loads(raw.decode(errors="ignore"))
+            host = j.get("add") or j.get("host")
+            port = int(j.get("port", 0))
+            return host, port
 
-def parse_host_port_simple(node: str):
-    """fallback parsing host:port"""
-    if "://" in node:
-        p = urlparse(node)
-        return p.hostname, p.port
-    if ":" in node:
-        a = node.split(":")
-        return a[0], int(a[1])
+        if node.startswith(("vless://", "trojan://")):
+            p = urlparse(node)
+            return p.hostname, p.port
+
+        if node.startswith("ss://"):
+            rest = node[len("ss://"):]
+            try:
+                if "@" in rest:
+                    after = rest.split("@", 1)[1]
+                    p = urlparse("ss://" + after)
+                    return p.hostname, p.port
+                else:
+                    dec = base64.b64decode(rest + '=' * (-len(rest) % 4)).decode(errors="ignore")
+                    if "@" in dec:
+                        after = dec.split("@", 1)[1]
+                        p = urlparse("ss://" + after)
+                        return p.hostname, p.port
+            except Exception:
+                return None, None
+
+        if "://" in node:
+            p = urlparse(node)
+            return p.hostname, p.port
+
+        if ":" in node:
+            parts = node.split(":")
+            return parts[0], int(parts[1]) if parts[1].isdigit() else None
+    except Exception:
+        pass
     return None, None
 
-def make_xray_config_for_node(node: str, listen_port: int):
-    outbound = None
-    tag = "out-1"
-    # vmess
-    if node.startswith("vmess://"):
-        j = parse_vmess(node)
-        vm = {
-            "v": j.get("v", "2"),
-            "ps": j.get("ps") or "",
-            "add": j.get("add") or j.get("host"),
-            "port": int(j.get("port", 0) or 0),
-            "id": j.get("id"),
-            "aid": str(j.get("aid", j.get("alterId", 0))),
-            "net": j.get("net", "tcp"),
-            "type": j.get("type", "none"),
-            "host": j.get("host", ""),
-            "path": j.get("path", ""),
-            "tls": j.get("tls", "")
-        }
-        outbound = {
-            "protocol": "vmess",
-            "settings": {"vnext":[{"address": vm["add"], "port": vm["port"], "users":[{"id": vm["id"], "alterId": int(vm["aid"] or 0), "security":"auto"}]}]},
-            "streamSettings": {}
-        }
-        net = vm["net"]
-        ss = {}
-        if net == "ws":
-            ss["network"] = "ws"
-            ss["wsSettings"] = {"path": vm.get("path",""), "headers":{"Host": vm.get("host","")}}
-        elif net == "h2":
-            ss["network"] = "http"
-        else:
-            ss["network"] = "tcp"
-        if vm.get("tls"):
-            ss["security"] = "tls"
-        if ss:
-            outbound["streamSettings"] = ss
 
-    elif node.startswith("vless://"):
-        p = urlparse(node)
-        host = p.hostname
-        port = p.port
-        query = p.query
-        qs = {}
-        for kv in query.split("&"):
-            if "=" in kv:
-                k,v = kv.split("=",1)
-                qs[k]=v
-        user = p.username
-        outbound = {
-            "protocol": "vless",
-            "settings": {"vnext":[{"address": host, "port": port or 443, "users":[{"id": user or "", "encryption":"none"}]}]},
-            "streamSettings": {}
-        }
-        if qs.get("type") == "ws":
-            outbound["streamSettings"]["network"] = "ws"
-            outbound["streamSettings"]["wsSettings"] = {"path": qs.get("path",""), "headers": {"Host": qs.get("host","")}}
-        if qs.get("security") == "tls":
-            outbound["streamSettings"]["security"] = "tls"
-
-    elif node.startswith("trojan://"):
-        p = urlparse(node)
-        host = p.hostname
-        port = p.port or 443
-        passwd = p.username
-        outbound = {
-            "protocol": "trojan",
-            "settings": {"servers": [{"address": host, "port": port, "password": passwd}]},
-            "streamSettings": {}
-        }
-        qs = p.query
-        if "type=ws" in qs:
-            outbound["streamSettings"]["network"]="ws"
-
-    elif node.startswith("ss://"):
-        rest = node[len("ss://"):]
-        host, port = None, None
-        if "@" in rest and "/" not in rest:
-            try:
-                tail = rest.split("@",1)[1]
-                p = urlparse("ss://"+tail)
-                host, port = p.hostname, p.port
-            except Exception:
-                host, port = None, None
-        else:
-            try:
-                dec = base64.b64decode(rest + '=' * (-len(rest) % 4)).decode(errors="ignore")
-                if "@" in dec:
-                    tail = dec.split("@",1)[1]
-                    p = urlparse("ss://"+tail)
-                    host, port = p.hostname, p.port
-            except Exception:
-                host, port = None, None
-        if host:
-            outbound = {
-                "protocol":"shadowsocks",
-                "settings":{"servers":[{"address":host,"port":port or 8388,"method":"aes-128-gcm","password":""}]},
-                "streamSettings":{}
-            }
-
-    if not outbound:
-        return None
-
-    cfg = {
-        "log": {"loglevel":"none"},
-        "inbounds":[
-            {"port": listen_port, "protocol":"socks", "settings": {"auth": "noauth", "udp": True}, "sniffing":{"enabled":False}}
-        ],
-        "outbounds":[
-            outbound,
-            {"protocol":"freedom","tag":"direct"}
-        ],
-        "routing":{"domainStrategy":"AsIs"}
-    }
-    return cfg
-
-
-def find_free_port():
-    s = socket.socket()
-    s.bind(('', 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
-
-
-def start_xray_with_config(cfg_json, workdir):
-    cfg_path = os.path.join(workdir, "config.json")
-    with open(cfg_path, "w", encoding="utf-8") as f:
-        json.dump(cfg_json, f)
-    xbin = ensure_xray()
-    env = os.environ.copy()
-    p = subprocess.Popen([xbin, "-c", cfg_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
-    return p
-
-
-def stop_process(p):
+# 快速 TCP 延迟检测（不使用代理，但检测连接延迟）
+async def tcp_latency(host, port):
+    """TCP三次握手测延迟（毫秒），失败返回 None"""
     try:
-        os.killpg(os.getpgid(p.pid), signal.SIGTERM)
-    except Exception:
+        start = time.perf_counter()
+        conn = asyncio.open_connection(host, port)
+        reader, writer = await asyncio.wait_for(conn, timeout=TIMEOUT)
+        writer.close()
         try:
-            p.terminate()
+            await writer.wait_closed()
         except Exception:
             pass
-    p.wait(timeout=5)
-
-
-def curl_via_socks(local_socks_port, timeout_s=8):
-    cmd = [
-        "curl", "-s", "-o", "/dev/null",
-        "--socks5-hostname", f"127.0.0.1:{local_socks_port}",
-        "--max-time", str(timeout_s),
-        "-w", "%{time_total}",
-        TEST_TARGET
-    ]
-    try:
-        out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, timeout=timeout_s+2)
-        t = float(out.decode().strip())
-        return t
+        end = time.perf_counter()
+        return int((end - start) * 1000)
     except Exception:
         return None
 
 
-async def test_single_node_real(node: str):
-    """启动 xray，测试通过 curl 获取延迟"""
-    workdir = tempfile.mkdtemp(prefix="xray_")
-    try:
-        port = find_free_port()
-        cfg = make_xray_config_for_node(node, port)
-        if not cfg:
-            return None
-        p = start_xray_with_config(cfg, workdir)
-        await asyncio.sleep(XRAY_START_WAIT)
-        t = curl_via_socks(port)
-        stop_process(p)
-        if t is None:
-            return None
-        return (node, int(t*1000))
-    except Exception:
-        try:
-            p and stop_process(p)
-        except Exception:
-            pass
+# 测试节点（使用轻量连接）
+async def check_node(node: str):
+    host, port = parse_host_port(node)
+    if not host or not port:
         return None
-    finally:
-        shutil.rmtree(workdir, ignore_errors=True)
+    delay = await tcp_latency(host, port)
+    if delay is None:
+        return None
+    return (node, delay)
 
 
-async def worker(queue, results):
-    while True:
-        node = await queue.get()
-        if node is None:
-            queue.task_done()
-            break
-        res = await test_single_node_real(node)
-        if res:
-            print("OK:", res[1], "ms", res[0][:80])
-            results.append(res)
-        else:
-            print("BAD:", node[:80])
-        queue.task_done()
-
-
-async def main():
-    nodes = await collect_all_nodes()
-    if not nodes:
-        print("No nodes collected")
-        return
-
-    q = asyncio.Queue()
-    for n in nodes:
-        q.put_nowait(n)
+# 测试多个节点（并发）
+async def test_nodes(nodes, max_nodes=20, concurrency=200):
+    """并发检测节点"""
+    sem = asyncio.Semaphore(concurrency)
     results = []
-    workers = []
-    for _ in range(min(CONCURRENCY, len(nodes))):
-        workers.append(asyncio.create_task(worker(q, results)))
 
-    await q.join()
-    for _ in workers:
-        q.put_nowait(None)
-    await asyncio.gather(*workers)
+    async def _wrap(node):
+        async with sem:
+            res = await check_node(node)
+            if res:
+                results.append(res)
 
+    tasks = [asyncio.create_task(_wrap(n)) for n in nodes]
+    await asyncio.gather(*tasks)
     results.sort(key=lambda x: x[1])
-    chosen = results[:MAX_NODES]
+    return results[:max_nodes]
+
+
+# 保存结果到 v2ray.txt
+def save_v2ray(nodes_with_delay):
     with open(OUTPUT_V2RAY, "w", encoding="utf-8") as f:
         f.write(f"# 更新时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        for node, ms in chosen:
-            f.write(f"{node}  # 延迟: {ms}ms\n")
-    print("Saved", len(chosen), "nodes to", OUTPUT_V2RAY)
+        for node, delay in nodes_with_delay:
+            f.write(f"{node}  # 延迟: {delay}ms\n")
+    logger.info(f"已保存 {len(nodes_with_delay)} 条可用节点到 {OUTPUT_V2RAY}")
+
+
+# 主函数：抓取节点、检测延迟、保存结果
+async def main():
+    logger.info("开始抓取订阅源...")
+    all_nodes = await collect_all_nodes()
+    if not all_nodes:
+        logger.warning("未获取到任何节点")
+        return
+
+    logger.info("开始测速...")
+    available_nodes = await test_nodes(all_nodes)
+    if not available_nodes:
+        logger.warning("无可用节点")
+        return
+
+    save_v2ray(available_nodes)
+    logger.info("✅ 检测与保存完成")
 
 
 if __name__ == "__main__":
