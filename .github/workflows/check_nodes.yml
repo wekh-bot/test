@@ -1,0 +1,34 @@
+name: Auto Node Checker
+
+on:
+  schedule:
+    - cron: "0 2 * * *"  # 每天北京时间10点执行
+  workflow_dispatch:
+
+jobs:
+  node-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.x
+
+      - name: Install dependencies
+        run: pip install aiohttp
+
+      - name: Run node checker
+        run: python main.py
+
+      - name: Commit and push results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add output/result.txt
+          git commit -m "Update checked nodes $(date '+%Y-%m-%d %H:%M:%S')" || echo "No changes"
+          git push
