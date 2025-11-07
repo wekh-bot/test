@@ -92,7 +92,7 @@ async def main():
         for node, status in results:
             f.write(f"{status} {node}\n")
 
-    available = sum(1 for _, s in results if "✅" in)
+    available = sum(1 for _, s in results if "✅" in s)
     print(f"检测完成，可用节点：{available}/{len(results)}")
     print(f"结果已保存：{RESULT_FILE}")
 
