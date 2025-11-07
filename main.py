@@ -4,10 +4,11 @@ import base64
 import re
 import os
 import json
-import time
 import ssl
+import time
 from datetime import datetime
 import logging
+from urllib.parse import urlparse
 
 # -----------------------------------
 # 日志配置
@@ -86,6 +87,7 @@ async def collect_nodes():
 # 检测可用性
 # -----------------------------------
 async def tcp_check(host: str, port: int, timeout: float = 5.0, do_ssl=False, ssl_sni=None):
+    """用于检查节点端口是否开放"""
     try:
         if do_ssl:
             ssl_ctx = ssl.create_default_context()
@@ -185,6 +187,7 @@ async def check_node(node: str, timeout=5.0):
     if not host or not port:
         return None
 
+    # 测试 TCP 连接
     start = time.time()
     ok = await tcp_check(host, port, timeout=timeout, do_ssl=False)
     if not ok:
@@ -192,7 +195,7 @@ async def check_node(node: str, timeout=5.0):
         ok_tls = await tcp_check(host, port, timeout=timeout, do_ssl=True, ssl_sni=host)
         if not ok_tls:
             return None
-    delay = int((time.time() - start) * 1000)
+    delay = int((time.time() - start) * 1000)  # 延迟单位：毫秒
     return node, delay
 
 
@@ -214,9 +217,6 @@ async def test_nodes(nodes, max_nodes=20, concurrency=200):
         res = await coro
         if res:
             results.append(res)
-            # 可选：如果已经收集到足够多，继续收集但可以提前结束（这里我们仍收集完成以便排序）
-            # if len(results) >= max_nodes:
-            #     break
 
     # 排序并截取前 max_nodes
     results.sort(key=lambda x: x[1])
