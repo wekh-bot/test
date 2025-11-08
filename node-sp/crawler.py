@@ -188,7 +188,6 @@ class BsbbCrawler:
 
     def save_to_file(self, filename="nodes.txt"):
         """只保存香港、美国、日本节点，每个国家最多10个"""
-        TARGET_COUNTRIES = ["US", "JP", "HK"]  # 目标国家
         country_limits = {c: 0 for c in TARGET_COUNTRIES}  # 记录每个国家保存的节点数
         max_per_country = 10  # 每个国家最多10个节点
 
