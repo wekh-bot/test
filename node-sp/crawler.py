@@ -2,6 +2,7 @@ import urllib.request
 import re
 import base64
 import json
+import os
 from datetime import datetime, timezone, timedelta
 
 # emoji到国家代码的映射
@@ -158,10 +159,15 @@ class BsbbCrawler:
         """保存节点信息到文件（去重后）"""
         unique_nodes = list(set(node['raw'] for node in self.nodes))
         
-        with open(filename, "w", encoding="utf-8") as f:
+        # 保证保存到仓库根目录
+        repo_root = os.getenv('GITHUB_WORKSPACE', os.path.abspath("../../"))
+        save_path = os.path.join(repo_root, filename)
+        
+        with open(save_path, "w", encoding="utf-8") as f:
             for node_raw in unique_nodes:
                 f.write(f"{node_raw}\n")
-        print(f"✅ 已保存 {len(unique_nodes)} 个节点到 {filename}")
+        
+        print(f"✅ 已保存 {len(unique_nodes)} 个节点到 {save_path}")
 
 if __name__ == "__main__":
     crawler = BsbbCrawler()
