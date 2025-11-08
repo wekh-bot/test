@@ -16,6 +16,9 @@ emoji_to_country = {
     '🇫🇮': 'FI', '🇷🇴': 'RO', '🇧🇪': 'BE'
 }
 
+# 目标国家：美国、日本、香港
+TARGET_COUNTRIES = ["US", "JP", "HK"]
+
 # 国家代码到中文名称的映射
 country_code_to_name = {
     'CN': '中国', 'US': '美国', 'SG': '新加坡', 'DE': '德国', 'GB': '英国',
@@ -36,7 +39,7 @@ class BsbbCrawler:
     def fetch_node_data(self):
         """获取节点数据"""
         try:
-            response = urllib.request.urlopen(self.node_file_url, timeout=10)
+            response = urllib.请求.urlopen(self.node_file_url, timeout=10)
             data = response.read().decode('utf-8')
             return data.strip().split('\n')
         except Exception as e:
@@ -101,9 +104,7 @@ class BsbbCrawler:
                 data = json.loads(decoded_data)
                 host = data.get("add", "")
                 port = data.get("port", "")
-                # 重新编码成base64格式
-                encoded_data = base64.b64encode(json.dumps(data).encode('utf-8')).decode('utf-8')
-                return host, port, encoded_data
+                return host, port
             else:
                 # 其他协议类型
                 if "?" in node_line:
@@ -114,10 +115,10 @@ class BsbbCrawler:
                 host_port = url_part.split("@")[-1].split(":")
                 host = host_port[0] if len(host_port) > 0 else ""
                 port = host_port[1] if len(host_port) > 1 else ""
-                return host, port, node_line
+                return host, port
         except Exception as e:
             # 不显示错误信息，避免干扰
-            return "", "", ""
+            return "", ""
 
     def crawl(self):
         """执行爬取任务"""
@@ -139,36 +140,56 @@ class BsbbCrawler:
         return self.nodes
 
     def filter_nodes(self):
-        """过滤出香港、美国和日本的节点，每个国家保留10个节点"""
-        filtered_nodes = []
-        countries_to_include = ['HK', 'US', 'JP']
-        country_count = {'HK': 0, 'US': 0, 'JP': 0}
+        """筛选指定地区的节点，每个地区最多保留10个"""
+        filtered = []
+        for country in TARGET_COUNTRIES:
+            # 筛选出特定国家的节点
+            country_nodes = [node for node in self.nodes if node["country_code"] == country]
+            
+            # 按延迟排序，取前10个节点
+            country_nodes_sorted = sorted(country_nodes, key=lambda x: x["latency"])[:10]
+            
+            filtered.extend(country_nodes_sorted)
+            print(f"{country_code_to_name[country]} 保留 {len(country_nodes_sorted)} 个节点")
 
-        for node in self.nodes:
-            if node['country_code'] in countries_to_include and country_count[node['country_code']] < 10:
-                filtered_nodes.append(node)
-                country_count[node['country_code']] += 1
-            if all(count >= 10 for count in country_count.values()):
-                break
+        self.nodes = filtered
+        print(f"筛选后共 {len(filtered)} 个节点")
+    
+    def save_to_file(self, filename="config.txt"):
+        """保存节点信息到config.txt"""
+        unique_nodes = list(set(node['raw'] for node in self.nodes))
         
-        return filtered_nodes
+        # 保证保存到仓库根目录
+        repo_root = os.getenv('GITHUB_WORKSPACE', os.path.abspath("../../"))
+        save_path = os.path.join(repo_root, filename)
+        
+        with open(save_path, "w", encoding="utf-8") as f:
+            for node_raw in unique_nodes:
+                f.write(f"{node_raw}\n")
+        
+        print(f"✅ 已保存 {len(unique_nodes)} 个节点到 {save_path}")
 
-    def save_to_file(self, filename="v2ray.txt"):
-        """保存指定国家节点信息到文件"""
-        filtered_nodes = self.filter_nodes()
+    def encode_to_v2ray(self, input_file="config.txt", output_file="v2ray.txt"):
+        """将 config.txt 编码为 v2ray.txt"""
+        with open(input_file, "r", encoding="utf-8") as f:
+            content = f.read()
+        encoded = base64.b64encode(content.encode("utf-8")).decode("utf-8")
         
-        with open(filename, "w", encoding="utf-8") as f:
-            for node in filtered_nodes:
-                # 对每个节点进行base64编码
-                if node['protocol'] == "vmess":
-                    f.write(f"vmess://{node['raw']}\n")
-                else:
-                    f.write(f"{node['raw']}\n")
-        print(f"指定国家的节点信息已保存到 {filename}，共 {len(filtered_nodes)} 个节点")
+        # 保存编码后的内容到 v2ray.txt
+        repo_root = os.getenv('GITHUB_WORKSPACE', os.path.abspath("../../"))
+        save_path = os.path.join(repo_root, output_file)
+        
+        with open(save_path, "w", encoding="utf-8") as f:
+            f.write(encoded)
+        
+        print(f"✅ 已将内容编码并保存到 {save_path}")
 
 if __name__ == "__main__":
     crawler = BsbbCrawler()
     nodes = crawler.crawl()
     if nodes:
-        # 保存香港、美国、日本节点
-        crawler.save_to_file()
+        crawler.filter_nodes()
+        crawler.save_to_file("config.txt")  # 生成 config.txt
+        crawler.encode_to_v2ray("config.txt", "v2ray.txt")  # 将 config.txt 编码为 v2ray.txt
+
+README.md 只写更新时间和 防失联自用，帮我改一下 
