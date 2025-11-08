@@ -191,5 +191,3 @@ if __name__ == "__main__":
         crawler.filter_nodes()
         crawler.save_to_file("config.txt")  # 生成 config.txt
         crawler.encode_to_v2ray("config.txt", "v2ray.txt")  # 将 config.txt 编码为 v2ray.txt
-
-README.md 只写更新时间和 防失联自用，帮我改一下 
