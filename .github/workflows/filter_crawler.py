@@ -137,4 +137,4 @@ if __name__ == "__main__":
     nodes = crawler.crawl()
     if nodes:
         crawler.filter_nodes()
-        crawler.save_to_file("v2ray.txt")  # 保存到根目录
+        crawler.save_to_file("v2ray.txt")  # 直接保存到仓库根目录
