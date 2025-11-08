@@ -125,7 +125,7 @@ class BsbbCrawler:
         print(f"筛选后总计 {len(filtered)} 个节点")
 
     def save_to_file(self, filename="v2ray.txt"):
-        """保存结果"""
+        """保存结果到仓库根目录"""
         unique_nodes = list(dict.fromkeys(node['raw'] for node in self.nodes))
         with open(filename, "w", encoding="utf-8") as f:
             for node_raw in unique_nodes:
@@ -137,4 +137,4 @@ if __name__ == "__main__":
     nodes = crawler.crawl()
     if nodes:
         crawler.filter_nodes()
-        crawler.save_to_file("v2ray.txt")  # 直接保存到仓库根目录
+        crawler.save_to_file("v2ray.txt")  # 保存到仓库根目录
