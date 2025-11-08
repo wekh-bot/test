@@ -132,7 +132,6 @@ class BsbbCrawler:
         if not node_lines:
             print("未能获取到节点数据")
             return
-            
         for line in node_lines:
             if line.strip():
                 node_info = self.parse_node(line.strip())
@@ -140,7 +139,6 @@ class BsbbCrawler:
                     self.nodes.append(node_info)
         
         print(f"爬取完成，共获取到 {len(self.nodes)} 个节点信息")
-        print(f"总共处理了 {len(node_lines)} 行数据")
         return self.nodes
 
     def filter_nodes(self):
@@ -158,7 +156,7 @@ class BsbbCrawler:
 
         self.nodes = filtered
         print(f"筛选后共 {len(filtered)} 个节点")
-    
+
     def save_to_file(self, filename="config.txt"):
         """保存节点信息到config.txt"""
         unique_nodes = list(set(node['raw'] for node in self.nodes))
@@ -188,6 +186,24 @@ class BsbbCrawler:
         
         print(f"✅ 已将内容编码并保存到 {save_path}")
 
+    def save_readme(self, filename="README.md"):
+        """保存README文件"""
+        readme_content = f"""# 节点更新
+
+更新时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## 防失联自用
+
+该脚本用于定期获取节点信息并编码，防止节点失联。
+"""
+        repo_root = os.getenv('GITHUB_WORKSPACE', os.path.abspath("../../"))
+        save_path = os.path.join(repo_root, filename)
+        
+        with open(save_path, "w", encoding="utf-8") as f:
+            f.write(readme_content)
+        
+        print(f"✅ 已保存 {filename}")
+
 if __name__ == "__main__":
     crawler = BsbbCrawler()
     nodes = crawler.crawl()
@@ -195,3 +211,4 @@ if __name__ == "__main__":
         crawler.filter_nodes()
         crawler.save_to_file("config.txt")  # 生成 config.txt
         crawler.encode_to_v2ray("config.txt", "v2ray.txt")  # 将 config.txt 编码为 v2ray.txt
+        crawler.save_readme()  # 保存 README.md
