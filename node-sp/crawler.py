@@ -16,9 +16,6 @@ emoji_to_country = {
     '🇫🇮': 'FI', '🇷🇴': 'RO', '🇧🇪': 'BE'
 }
 
-# 目标国家：美国、日本、香港
-TARGET_COUNTRIES = ["US", "JP", "HK"]
-
 # 国家代码到中文名称的映射
 country_code_to_name = {
     'CN': '中国', 'US': '美国', 'SG': '新加坡', 'DE': '德国', 'GB': '英国',
@@ -140,38 +137,32 @@ class BsbbCrawler:
         return self.nodes
 
     def filter_nodes(self):
-        """筛选指定地区的节点，每个地区最多保留10个"""
-        filtered = []
-        for country in TARGET_COUNTRIES:
-            # 筛选出特定国家的节点
-            country_nodes = [node for node in self.nodes if node["country_code"] == country]
-            
-            # 按延迟排序，取前10个节点
-            country_nodes_sorted = sorted(country_nodes, key=lambda x: x["latency"])[:10]
-            
-            filtered.extend(country_nodes_sorted)
-            print(f"{country_code_to_name[country]} 保留 {len(country_nodes_sorted)} 个节点")
+        """过滤出香港、美国和日本的节点，每个国家保留10个节点"""
+        filtered_nodes = []
+        countries_to_include = ['HK', 'US', 'JP']
+        country_count = {'HK': 0, 'US': 0, 'JP': 0}
 
-        self.nodes = filtered
-        print(f"筛选后共 {len(filtered)} 个节点")
-    
+        for node in self.nodes:
+            if node['country_code'] in countries_to_include and country_count[node['country_code']] < 10:
+                filtered_nodes.append(node)
+                country_count[node['country_code']] += 1
+            if all(count >= 10 for count in country_count.values()):
+                break
+        
+        return filtered_nodes
+
     def save_to_file(self, filename="v2ray.txt"):
-        """保存节点信息到文件（去重后）"""
-        unique_nodes = list(set(node['raw'] for node in self.nodes))
+        """保存指定国家节点信息到文件"""
+        filtered_nodes = self.filter_nodes()
         
-        # 保证保存到仓库根目录
-        repo_root = os.getenv('GITHUB_WORKSPACE', os.path.abspath("../../"))
-        save_path = os.path.join(repo_root, filename)
-        
-        with open(save_path, "w", encoding="utf-8") as f:
-            for node_raw in unique_nodes:
-                f.write(f"{node_raw}\n")
-        
-        print(f"✅ 已保存 {len(unique_nodes)} 个节点到 {save_path}")
+        with open(filename, "w", encoding="utf-8") as f:
+            for node in filtered_nodes:
+                f.write(f"{node['raw']}\n")
+        print(f"指定国家的节点信息已保存到 {filename}，共 {len(filtered_nodes)} 个节点")
 
 if __name__ == "__main__":
     crawler = BsbbCrawler()
     nodes = crawler.crawl()
     if nodes:
-        crawler.filter_nodes()
-        crawler.save_to_file("v2ray.txt")  # 保存到根目录
+        # 保存香港、美国、日本节点
+        crawler.save_to_file()
