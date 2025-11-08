@@ -16,6 +16,9 @@ emoji_to_country = {
     '🇫🇮': 'FI', '🇷🇴': 'RO', '🇧🇪': 'BE'
 }
 
+# 目标国家：美国、日本、香港
+TARGET_COUNTRIES = ["US", "JP", "HK"]
+
 # 国家代码到中文名称的映射
 country_code_to_name = {
     'CN': '中国', 'US': '美国', 'SG': '新加坡', 'DE': '德国', 'GB': '英国',
@@ -125,7 +128,7 @@ class BsbbCrawler:
         if not node_lines:
             print("未能获取到节点数据")
             return
-            
+        
         for line in node_lines:
             if line.strip():
                 node_info = self.parse_node(line.strip())
@@ -133,7 +136,6 @@ class BsbbCrawler:
                     self.nodes.append(node_info)
         
         print(f"爬取完成，共获取到 {len(self.nodes)} 个节点信息")
-        print(f"总共处理了 {len(node_lines)} 行数据")
         return self.nodes
 
     def analyze_nodes(self):
@@ -185,14 +187,26 @@ class BsbbCrawler:
         }
 
     def save_to_file(self, filename="nodes.txt"):
-        """保存节点信息到文件（去重后）"""
-        # 去重节点
-        unique_nodes = list(set(node['raw'] for node in self.nodes))
-        
+        """只保存香港、美国、日本节点，每个国家最多10个"""
+        TARGET_COUNTRIES = ["US", "JP", "HK"]  # 目标国家
+        country_limits = {c: 0 for c in TARGET_COUNTRIES}  # 记录每个国家保存的节点数
+        max_per_country = 10  # 每个国家最多10个节点
+
+        filtered_nodes = []  # 用于保存符合条件的节点
+        for node in self.nodes:
+            cc = node['country_code']
+            # 如果节点属于目标国家且该国家节点数未超过10个，则保存该节点
+            if cc in TARGET_COUNTRIES and country_limits[cc] < max_per_country:
+                filtered_nodes.append(node['raw'])
+                country_limits[cc] += 1
+
+        # 将符合条件的节点写入文件
         with open(filename, "w", encoding="utf-8") as f:
-            for node_raw in unique_nodes:
-                f.write(f"{node_raw}\n")
-        print(f"去重后的节点信息已保存到 {filename}，共 {len(unique_nodes)} 个节点")
+            for raw in filtered_nodes:
+                f.write(raw + "\n")
+
+        # 输出保存的节点信息
+        print(f"已保存 {len(filtered_nodes)} 个节点（{', '.join(TARGET_COUNTRIES)} 各最多10个）到 {filename}")
 
     def update_readme(self, analysis_result):
         """更新 README.md 文件"""
