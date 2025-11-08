@@ -1,5 +1,4 @@
-import importlib
-urllib = importlib.import_module("urllib.request")
+import urllib.request
 import re
 import base64
 import json
