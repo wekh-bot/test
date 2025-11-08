@@ -1,70 +1,58 @@
-name: Filter Subscription Links
+name: 🕷️ Node Crawler & Filter (Auto Update)
 
 on:
-  push:
-    branches:
-      - main  # 触发推送到主分支时运行
   schedule:
-    - cron: '0 0 * * *'  # 每天自动运行一次
+    - cron: '0 */6 * * *'  # 每6小时自动运行一次
+  workflow_dispatch:  # 可手动触发
 
 jobs:
-  filter_links:
-    runs-on: ubuntu-latest  # 运行在最新的 Ubuntu 环境
-    
+  run-crawler:
+    runs-on: ubuntu-latest
+
     steps:
-      # Step 1: Checkout the repository
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.CRAWLER }}
 
-      # Step 2: Set up Git user identity for the GitHub Actions bot
-      - name: Set up Git user for GitHub Actions bot
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
         run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          python -m pip install --upgrade pip
+
+      - name: Run crawler and filter nodes
+        run: |
+          cd node-sp
+          python filter_crawler.py
+
+      - name: Encode output and save as config.txt
+        run: |
+          cd node-sp
+          base64 -w 0 filtered_nodes.txt > ../config.txt
+
+      - name: Commit and push changes
+        run: |
           git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add config.txt node-sp/filtered_nodes.txt
+          git commit -m "🤖 Auto-update filtered_nodes.txt & config.txt" || echo "No changes to commit"
+          git push origin main
 
-      # Step 3: Download the Clash and V2Ray subscription files
-      - name: Download Clash subscription
-        run: |
-          wget -qO clash.yaml "https://api-suc.0z.gs/sub?target=clash&url=https%3A%2F%2Fproxy.v2gh.com%2Fhttps%3A%2F%2Fraw.githubusercontent.com%2FPawdroid%2FFree-servers%2Fmain%2Fsub"
-
-      - name: Download V2Ray subscription
-        run: |
-          wget -qO v2ray.txt "https://api-suc.0z.gs/sub?target=v2ray&url=https%3A%2F%2Fproxy.v2gh.com%2Fhttps%3A%2F%2Fraw.githubusercontent.com%2FPawdroid%2FFree-servers%2Fmain%2Fsub"
-
-      # Step 4: Filter the valid Clash links
-      - name: Filter valid Clash links
-        run: |
-          # Create a new file to store valid URLs
-          touch valid_clash_urls.txt
-          # Extract URLs and check validity
-          grep -Eo 'http[s]?://[^\"]+' clash.yaml | while read -r url; do
-            if curl --head --silent --fail "$url" > /dev/null; then
-              echo "$url" >> valid_clash_urls.txt
-            else
-              echo "Invalid Clash URL: $url"
-            fi
-          done
-
-      # Step 5: Filter the valid V2Ray links
-      - name: Filter valid V2Ray links
-        run: |
-          # Create a new file to store valid URLs
-          touch valid_v2ray_urls.txt
-          # Extract URLs and check validity
-          grep -Eo 'http[s]?://[^\"]+' v2ray.txt | while read -r url; do
-            if curl --head --silent --fail "$url" > /dev/null; then
-              echo "$url" >> valid_v2ray_urls.txt
-            else
-              echo "Invalid V2Ray URL: $url"
-            fi
-          done
-
-      # Step 6: Commit the filtered files to the repository
-      - name: Commit filtered URLs
-        run: |
-          echo "Updating the filtered configuration files"
-          mv valid_clash_urls.txt clash.yaml
-          mv valid_v2ray_urls.txt v2ray.txt
-          git add clash.yaml v2ray.txt
-          git commit -m "Updated subscription files with valid links only"
-          git push
+  cleanup-runs:
+    needs: run-crawler
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Delete old workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          retain_days: 0
+          keep_minimum_runs: 4
