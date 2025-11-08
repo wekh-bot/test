@@ -9,38 +9,49 @@ jobs:
   run-crawler:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Checkout repository
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.CRAWLER }}
 
-      # Step 2: Set up Python environment
-      - name: Set up Python
-        uses: actions/setup-python@v4
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+
+    - name: Run crawler script
+      run: |
+        cd node-sp
+        python crawler.py
+
+    - name: Encode output and save as config.txt
+      run: |
+        cd node-sp
+        base64 -w 0 nodes.txt > ../config.txt
+
+    - name: Commit and push changes
+      run: |
+        git config user.name "vampireisoves"
+        git config user.email "893751627@qq.com"
+        git add config.txt README.md
+        git commit -m "Update config.txt and README.md with latest crawler output" || echo "No changes to commit"
+        git push origin main
+
+  del_runs:
+    needs: run-crawler
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Delete workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
         with:
-          python-version: '3.x'
-
-      # Step 3: Install dependencies
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-
-      # Step 4: Run crawler script
-      - name: Run crawler script
-        run: |
-          cd node-sp
-          python crawler.py
-
-      # Step 5: Encode config.txt and save as v2ray.txt
-      - name: Encode config.txt and save as v2ray.txt
-        run: |
-          base64 -w 0 config.txt > v2ray.txt
-
-      # Step 6: Commit and push changes with commit time
-      - name: Commit and push changes
-        run: |
-          COMMIT_TIME=$(date +"%Y-%m-%d %H:%M:%S")
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add v2ray.txt
-          git commit -m "$COMMIT_TIME" || echo "No changes to commit"
-          git push origin main
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          retain_days: 0
+          keep_minimum_runs: 4
