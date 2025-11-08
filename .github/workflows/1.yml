@@ -30,16 +30,17 @@ jobs:
           cd node-sp
           python crawler.py
 
-      # Step 5: Encode output and save as config.txt
-      - name: Encode output and save as config.txt
+      # Step 5: Encode config.txt and save as v2ray.txt
+      - name: Encode config.txt and save as v2ray.txt
         run: |
-          base64 -w 0 v2ray.txt > config.txt
+          base64 -w 0 config.txt > v2ray.txt
 
-      # Step 6: Commit and push changes (using GitHub Actions bot)
+      # Step 6: Commit and push changes with commit time
       - name: Commit and push changes
         run: |
+          COMMIT_TIME=$(date +"%Y-%m-%d %H:%M:%S")
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add config.txt README.md
-          git commit -m "Update config.txt and README.md with latest crawler output" || echo "No changes to commit"
+          git add v2ray.txt
+          git commit -m "$COMMIT_TIME" || echo "No changes to commit"
           git push origin main
