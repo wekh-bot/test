@@ -39,7 +39,7 @@ class BsbbCrawler:
     def fetch_node_data(self):
         """获取节点数据"""
         try:
-            response = urllib.request.urlopen(self.node_file_url, timeout=10)
+            response = urllib.请求.urlopen(self.node_file_url, timeout=10)
             data = response.read().decode('utf-8')
             return data.strip().split('\n')
         except Exception as e:
