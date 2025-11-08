@@ -9,7 +9,7 @@ jobs:
   run-crawler:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Checkout repository using default GitHub token
+      # Step 1: Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -33,8 +33,8 @@ jobs:
       # Step 5: Encode output and save as config.txt
       - name: Encode output and save as config.txt
         run: |
-          cd node-sp
-          base64 -w 0 nodes.txt > ../config.txt
+          # 确保路径正确，使用相对路径来处理文件
+          base64 -w 0 nodes.txt > config.txt
 
       # Step 6: Commit and push changes (using GitHub Actions bot)
       - name: Commit and push changes
@@ -44,19 +44,3 @@ jobs:
           git add config.txt README.md
           git commit -m "Update config.txt and README.md with latest crawler output" || echo "No changes to commit"
           git push origin main
-
-  del_runs:
-    needs: run-crawler
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-      contents: read
-    steps:
-      # Step 1: Delete old workflow runs
-      - name: Delete workflow runs
-        uses: Mattraks/delete-workflow-runs@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.repository }}
-          retain_days: 0
-          keep_minimum_runs: 4
