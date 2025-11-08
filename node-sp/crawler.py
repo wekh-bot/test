@@ -27,7 +27,7 @@ country_code_to_name = {
     'TH': '泰国', 'VN': '越南', 'PH': '菲律宾', 'MY': '马来西亚', 'TW': '台湾',
     'HK': '香港', 'MO': '澳门', 'CW': '库拉索', 'ES': '西班牙', 'TR': '土耳其',
     'NO': '挪威', 'UA': '乌克兰', 'LV': '拉脱维亚', 'KH': '柬埔寨', 'SE': '瑞典',
-    'FI': '芬兰', 'RO': '罗马尼亚', 'BE': '比利时', '未知': '未知'
+    'FI': '芬兰', 'RO': '罗马尼亚', 'BE': '比利时'
 }
 
 class BsbbCrawler:
@@ -68,11 +68,11 @@ class BsbbCrawler:
         # 优先使用emoji中的国家代码，如果没有则使用原来的提取方式
         if country_emoji_match:
             country_emoji = country_emoji_match.group(1)
-            country_code = emoji_to_country.get(country_emoji, "未知")
+            country_code = emoji_to_country.get(country_emoji, "")
         elif country_code_match:
             country_code = country_code_match.group(2)
         else:
-            country_code = "未知"
+            country_code = ""
             
         latency = int(latency_match.group(1)) if latency_match else None
         
