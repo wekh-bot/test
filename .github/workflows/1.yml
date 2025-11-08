@@ -1,46 +1,64 @@
-name: 🕷️ Node Crawler & Filter (Auto Update)
+name: Crawler Runner & del
 
 on:
   schedule:
-    - cron: '0 */6 * * *'  # 每6小时自动运行一次
-  workflow_dispatch:  # 支持手动触发
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
 
 jobs:
   run-crawler:
     runs-on: ubuntu-latest
-
     steps:
-      # Step 1: 检出仓库
+      # Step 1: Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.CRAWLER }}
 
-      # Step 2: 设置 Python 环境
+      # Step 2: Set up Python environment
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.x'
 
-      # Step 3: 安装依赖
+      # Step 3: Install dependencies
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
 
-      # Step 4: 运行爬虫脚本
-      - name: Run crawler and filter nodes
+      # Step 4: Run crawler script
+      - name: Run crawler script
         run: |
-          cd .github/workflows
-          python filter_crawler.py
+          cd node-sp
+          python crawler.py
 
-      # Step 5: 提交并推送更新
+      # Step 5: Encode output and save as config.txt
+      - name: Encode output and save as config.txt
+        run: |
+          cd node-sp
+          base64 -w 0 nodes.txt > ../config.txt
+
+      # Step 6: Commit and push changes (using GitHub Actions bot)
       - name: Commit and push changes
         run: |
-          echo "检查文件是否存在:"
-          ls -l $GITHUB_WORKSPACE/v2ray.txt || echo "❌ 文件不存在！"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add config.txt README.md
+          git commit -m "Update config.txt and README.md with latest crawler output" || echo "No changes to commit"
+          git push origin main
 
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          
-          cd $GITHUB_WORKSPACE
-          git add v2ray.txt || true
-          git commit -m "🤖 Auto-update v2ray.txt with latest filtered nodes" || echo "No changes to commit"
-          git push origin main || echo "No changes to push"
+  del_runs:
+    needs: run-crawler
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      # Step 1: Delete old workflow runs
+      - name: Delete workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          retain_days: 0
+          keep_minimum_runs: 4
