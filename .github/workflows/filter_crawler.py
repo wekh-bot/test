@@ -3,7 +3,6 @@ import re
 import base64
 import json
 from datetime import datetime, timezone, timedelta
-import os
 
 # emoji 到国家代码映射
 emoji_to_country = {
@@ -125,18 +124,17 @@ class BsbbCrawler:
         self.nodes = filtered
         print(f"筛选后总计 {len(filtered)} 个节点")
 
-    def save_to_file(self, filename="filtered_nodes.txt"):
+    def save_to_file(self, filename="v2ray.txt"):
         """保存结果"""
         unique_nodes = list(dict.fromkeys(node['raw'] for node in self.nodes))
         with open(filename, "w", encoding="utf-8") as f:
             for node_raw in unique_nodes:
                 f.write(f"{node_raw}\n")
-        file_size = os.path.getsize(filename) / 1024
-        print(f"✅ 已保存 {len(unique_nodes)} 个节点到 {filename} ({file_size:.2f} KB)")
+        print(f"✅ 已保存 {len(unique_nodes)} 个节点到 {filename}")
 
 if __name__ == "__main__":
     crawler = BsbbCrawler()
     nodes = crawler.crawl()
     if nodes:
         crawler.filter_nodes()
-        crawler.save_to_file()
+        crawler.save_to_file("v2ray.txt")
