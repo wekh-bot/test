@@ -33,8 +33,7 @@ jobs:
       # Step 5: Encode output and save as config.txt
       - name: Encode output and save as config.txt
         run: |
-          # 确保路径正确，使用相对路径来处理文件
-          base64 -w 0 nodes.txt > config.txt
+          base64 -w 0 v2ray.txt > config.txt
 
       # Step 6: Commit and push changes (using GitHub Actions bot)
       - name: Commit and push changes
