@@ -158,7 +158,7 @@ class BsbbCrawler:
         
         return country_count
 
-    def save_to_file(self, filename="nodes.txt"):
+    def save_to_file(self, filename="v2ray.txt"):
         """只保存香港、美国、日本节点，每个国家最多10个"""
         country_limits = {c: 0 for c in TARGET_COUNTRIES}  # 记录每个国家保存的节点数
         max_per_country = 10  # 每个国家最多10个节点
@@ -186,4 +186,4 @@ if __name__ == "__main__":
         # 分析节点信息
         country_count = crawler.analyze_nodes()
         # 保存去重后的节点信息
-        crawler.save_to_file()
+        crawler.save_to_file("v2ray.txt")
