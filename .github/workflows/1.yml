@@ -31,18 +31,19 @@ jobs:
           cd .github/workflows
           python filter_crawler.py
 
-      # Step 5: 将结果文件转为 Base64
+      # Step 5: 将结果文件转为 Base64 并保存为 config.txt
       - name: Encode output and save as config.txt
         run: |
           cd .github/workflows
           base64 -w 0 filtered_nodes.txt > ../../config.txt
 
-      # Step 6: 提交更新
+      # Step 6: 提交并推送更新
       - name: Commit and push changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add ../../config.txt .github/workflows/filtered_nodes.txt || true
+          # 保存到仓库根目录
+          git add filtered_nodes.txt config.txt || true
           git commit -m "🤖 Auto-update filtered_nodes.txt & config.txt" || echo "No changes to commit"
           git push origin main || echo "No changes to push"
         continue-on-error: true
