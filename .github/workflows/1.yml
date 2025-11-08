@@ -31,12 +31,11 @@ jobs:
           cd .github/workflows
           python filter_crawler.py
 
-      # Step 5: 提交并推送更新
-      - name: Commit and push changes
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add v2ray.txt || true
-          git commit -m "🤖 Auto-update v2ray.txt with latest filtered nodes" || echo "No changes to commit"
-          git push origin main || echo "No changes to push"
-        continue-on-error: true
+    - name: Commit and push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add v2ray.txt
+        git commit -m "Update live streams playlist" --allow-empty
+        git push
+
