@@ -5,173 +5,101 @@ import json
 import os
 from datetime import datetime, timezone, timedelta
 
-# emoji到国家代码的映射
 emoji_to_country = {
-    '🇨🇳': 'CN', '🇺🇸': 'US', '🇸🇬': 'SG', '🇩🇪': 'DE', '🇬🇧': 'GB',
-    '🇯🇵': 'JP', '🇰🇷': 'KR', '🇫🇷': 'FR', '🇷🇺': 'RU', '🇮🇳': 'IN',
-    '🇧🇷': 'BR', '🇨🇦': 'CA', '🇦🇺': 'AU', '🇳🇱': 'NL', '🇮🇩': 'ID',
-    '🇹🇭': 'TH', '🇻🇳': 'VN', '🇵🇭': 'PH', '🇲🇾': 'MY', '🇹🇼': 'TW',
-    '🇭🇰': 'HK', '🇲🇴': 'MO', '🇨🇼': 'CW', '🇪🇸': 'ES', '🇹🇷': 'TR',
-    '🇳🇴': 'NO', '🇺🇦': 'UA', '🇱🇻': 'LV', '🇰🇭': 'KH', '🇸🇪': 'SE',
-    '🇫🇮': 'FI', '🇷🇴': 'RO', '🇧🇪': 'BE'
+    '🇨🇳': 'CN', '🇺🇸': 'US', '🇸🇬': 'SG', '🇯🇵': 'JP',
+    '🇰🇷': 'KR', '🇹🇼': 'TW', '🇭🇰': 'HK'
 }
 
-# 目标国家：美国、日本、香港、法国
-TARGET_COUNTRIES = ["US", "JP", "HK", "FR"]
-
-# 国家代码到中文名称的映射
 country_code_to_name = {
-    'CN': '中国', 'US': '美国', 'SG': '新加坡', 'DE': '德国', 'GB': '英国',
-    'JP': '日本', 'KR': '韩国', 'FR': '法国', 'RU': '俄罗斯', 'IN': '印度',
-    'BR': '巴西', 'CA': '加拿大', 'AU': '澳大利亚', 'NL': '荷兰', 'ID': '印度尼西亚',
-    'TH': '泰国', 'VN': '越南', 'PH': '菲律宾', 'MY': '马来西亚', 'TW': '台湾',
-    'HK': '香港', 'MO': '澳门', 'CW': '库拉索', 'ES': '西班牙', 'TR': '土耳其',
-    'NO': '挪威', 'UA': '乌克兰', 'LV': '拉脱维亚', 'KH': '柬埔寨', 'SE': '瑞典',
-    'FI': '芬兰', 'RO': '罗马尼亚', 'BE': '比利时'
+    'CN': '中国', 'US': '美国', 'JP': '日本', 'HK': '香港', '未知': '未知'
 }
+
+TARGET_COUNTRIES = ["US", "JP", "HK"]  # 只要这三个国家
+MAX_PER_COUNTRY = 10  # 每个国家最多10个节点
+
 
 class BsbbCrawler:
     def __init__(self):
-        self.base_url = "https://www.bsbb.cc"
-        self.node_file_url = f"{self.base_url}/V2RAY.txt"
+        self.url = "https://www.bsbb.cc/V2RAY.txt"
         self.nodes = []
 
     def fetch_node_data(self):
-        """获取节点数据"""
+        """获取节点原始数据"""
         try:
-            response = urllib.request.urlopen(self.node_file_url, timeout=10)
-            data = response.read().decode('utf-8')
-            return data.strip().split('\n')
+            print("正在获取节点数据...")
+            response = urllib.请求.urlopen(self.url, timeout=15)
+            data = response.read().decode("utf-8")
+            return data.strip().split("\n")
         except Exception as e:
-            print(f"获取节点数据时出错: {e}")
+            print(f"获取节点数据失败: {e}")
             return []
 
-    def parse_node(self, node_line):
-        """解析单个节点信息"""
-        # 提取协议类型
-        protocol_match = re.match(r'([^:]+)://', node_line)
+    def parse_node(self, line):
+        """解析单个节点"""
+        protocol_match = re.match(r'([^:]+)://', line)
         if not protocol_match:
             return None
-            
         protocol = protocol_match.group(1).lower()
-        
-        # 提取备注信息（包含国家和延迟）
-        remark_match = re.search(r'#(.+)$', node_line)
-        remark = remark_match.group(1) if remark_match else ""
-        
-        # 提取国家代码和延迟
-        # 从备注中提取国家代码（例如：🇺🇸 www.bsbb.cc vless-US 87ms）
-        country_emoji_match = re.search(r'^([\U0001F1E6-\U0001F1FF]{2})', remark)
-        country_code_match = re.search(r'([A-Z]{2})\s*www\.bsbb\.cc\s*[a-zA-Z]+-([A-Z]{2})', remark)
-        latency_match = re.search(r'(\d+)ms$', remark)
-        
-        # 优先使用emoji中的国家代码，如果没有则使用原来的提取方式
-        if country_emoji_match:
-            country_emoji = country_emoji_match.group(1)
-            country_code = emoji_to_country.get(country_emoji, "")
-        elif country_code_match:
-            country_code = country_code_match.group(2)
-        else:
-            country_code = ""
-            
-        latency = int(latency_match.group(1)) if latency_match else None
-        
-        # 提取主机和端口
-        host, port = self.extract_host_port(node_line, protocol)
-        
-        return {
-            "protocol": protocol,
-            "country_code": country_code,
-            "latency": latency,
-            "host": host,
-            "port": port,
-            "raw": node_line
-        }
+        if protocol != "vless" and protocol != "vmess" and protocol != "trojan":
+            return None  # 非 ws 节点协议不处理
 
-    def extract_host_port(self, node_line, protocol):
-        """从节点链接中提取主机和端口"""
-        try:
-            if protocol == "vmess":
-                # Vmess节点需要base64解码
-                encoded_data = node_line[8:]  # 去掉"vmess://"
-                # 添加缺少的填充字符
-                missing_padding = len(encoded_data) % 4
-                if missing_padding:
-                    encoded_data += '=' * (4 - missing_padding)
-                
-                # 处理非ASCII字符
-                decoded_data = base64.b64decode(encoded_data.encode('ascii')).decode('utf-8')
-                data = json.loads(decoded_data)
-                host = data.get("add", "")
-                port = data.get("port", "")
-                return host, port
-            else:
-                # 其他协议类型
-                if "?" in node_line:
-                    url_part = node_line.split("?")[0]
-                else:
-                    url_part = node_line.split("#")[0]
-                
-                host_port = url_part.split("@")[-1].split(":")
-                host = host_port[0] if len(host_port) > 0 else ""
-                port = host_port[1] if len(host_port) > 1 else ""
-                return host, port
-        except Exception as e:
-            # 不显示错误信息，避免干扰
-            return "", ""
+        # ws协议识别（包含ws、wss）
+        if "ws" not in line.lower():
+            return None
+
+        remark_match = re.search(r'#(.+)$', line)
+        remark = remark_match.group(1) if remark_match else ""
+        emoji_match = re.search(r'^([\U0001F1E6-\U0001F1FF]{2})', remark)
+        latency_match = re.search(r'(\d+)ms$', remark)
+        country = emoji_to_country.get(emoji_match.group(1), "未知") if emoji_match else "未知"
+        latency = int(latency_match.group(1)) if latency_match else 9999
+
+        return {"raw": line, "country": country, "latency": latency, "protocol": protocol}
 
     def crawl(self):
-        """执行爬取任务"""
-        print("开始爬取 www.bsbb.cc 节点信息...")
-        node_lines = self.fetch_node_data()
-        
-        if not node_lines:
-            print("未能获取到节点数据")
-            return
-            
-        for line in node_lines:
+        """执行爬取"""
+        raw_lines = self.fetch_node_data()
+        for line in raw_lines:
             if line.strip():
-                node_info = self.parse_node(line.strip())
-                if node_info:
-                    self.nodes.append(node_info)
-        
-        print(f"爬取完成，共获取到 {len(self.nodes)} 个节点信息")
-        print(f"总共处理了 {len(node_lines)} 行数据")
+                node = self.parse_node(line.strip())
+                if node:
+                    self.nodes.append(node)
+        print(f"共爬取到 {len(self.nodes)} 个节点")
         return self.nodes
 
     def filter_nodes(self):
-        """筛选指定地区的节点，每个地区最多保留10个"""
+        """筛选符合要求的节点"""
         filtered = []
         for country in TARGET_COUNTRIES:
-            # 筛选出特定国家的节点
-            country_nodes = [node for node in self.nodes if node["country_code"] == country]
-            
-            # 按延迟排序，取前10个节点
-            country_nodes_sorted = sorted(country_nodes, key=lambda x: x["latency"])[:10]
-            
-            filtered.extend(country_nodes_sorted)
-            print(f"{country_code_to_name[country]} 保留 {len(country_nodes_sorted)} 个节点")
-
+            nodes = [n for n in self.nodes if n["country"] == country]
+            nodes = sorted(nodes, key=lambda x: x["latency"])[:MAX_PER_COUNTRY]
+            filtered.extend(nodes)
+            print(f"{country_code_to_name[country]} 保留 {len(nodes)} 个 ws 节点")
         self.nodes = filtered
         print(f"筛选后共 {len(filtered)} 个节点")
-    
-    def save_to_file(self, filename="config.txt"):
-        """保存节点信息到config.txt文件"""
-        unique_nodes = list(set(node['raw'] for node in self.nodes))
-        
-        # 确保保存到仓库根目录
-        repo_root = os.getenv('GITHUB_WORKSPACE', os.path.abspath("../../"))
-        save_path = os.path.join(repo_root, filename)
-        
-        with open(save_path, "w", encoding="utf-8") as f:
-            for node_raw in unique_nodes:
-                f.write(f"{node_raw}\n")
-        
-        print(f"✅ 已保存 {len(unique_nodes)} 个节点到 {save_path}")
+
+    def save_to_files(self):
+        """保存 config.txt 和更新 README.md"""
+        workspace = os.getenv("GITHUB_WORKSPACE", os.path.abspath("../../"))
+
+        # 保存 config.txt
+        config_path = os.path.join(workspace, "config.txt")
+        with open(config_path, "w", encoding="utf-8") as f:
+            for node in self.nodes:
+                f.write(node["raw"] + "\n")
+        print(f"✅ 已保存 {len(self.nodes)} 个节点到 {config_path}")
+
+        # 更新 README.md，仅更新时间
+        readme_path = os.path.join(workspace, "README.md")
+        china_tz = timezone(timedelta(hours=8))
+        now = datetime.now(china_tz).strftime("%Y-%m-%d %H:%M:%S")
+        with open(readme_path, "w", encoding="utf-8") as f:
+            f.write(f"# 更新时间\n\n最后更新: {now}\n")
+        print(f"✅ README.md 更新时间已写入: {now}")
+
 
 if __name__ == "__main__":
     crawler = BsbbCrawler()
-    nodes = crawler.crawl()
-    if nodes:
+    if crawler.crawl():
         crawler.filter_nodes()
-        crawler.save_to_file("config.txt")  # 保存为config.txt
+        crawler.save_to_files()
