@@ -3,37 +3,41 @@ name: 🕷️ Node Crawler & Filter (Auto Update)
 on:
   schedule:
     - cron: '0 */6 * * *'  # 每6小时自动运行一次
-  workflow_dispatch:  # 支持手动触发
+  workflow_dispatch:  # 允许手动触发
 
 jobs:
   run-crawler:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: 检出仓库
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.CRAWLER }}
 
+      # Step 2: 设置 Python 环境
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.x'
 
+      # Step 3: 安装依赖
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
 
+      # Step 4: 运行爬虫脚本
       - name: Run crawler and filter nodes
         run: |
           cd .github/workflows
           python filter_crawler.py
 
+      # Step 5: 将输出文件编码为 Base64
       - name: Encode output and save as config.txt
         run: |
           cd .github/workflows
           base64 -w 0 filtered_nodes.txt > ../../config.txt
 
+      # Step 6: 提交和推送结果
       - name: Commit and push changes
         run: |
           git config --global user.name "github-actions[bot]"
