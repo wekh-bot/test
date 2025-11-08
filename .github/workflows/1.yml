@@ -24,6 +24,6 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add proxy/v2ray.txt
-          commit_message="Auto update v2ray.txt on $(date +'%Y-%m-%d %H:%M:%S')"
+          commit_message="Updated $(date -u '+%Y-%m-%d %H:%M') CST"
           git commit -m "$commit_message" --allow-empty
           git push
