@@ -3,20 +3,26 @@ name: Filter Subscription Links
 on:
   push:
     branches:
-      - main  # 这里确保没有语法问题，推送到主分支时触发
+      - main  # 触发推送到主分支时运行
   schedule:
     - cron: '0 0 * * *'  # 每天自动运行一次
 
 jobs:
   filter_links:
-    runs-on: ubuntu-latest  # 确保这个键值没有遗漏或语法问题
+    runs-on: ubuntu-latest  # 运行在最新的 Ubuntu 环境
     
     steps:
       # Step 1: Checkout the repository
       - name: Checkout repository
-        uses: actions/checkout@v3  # 确保这行正确使用了版本
+        uses: actions/checkout@v3
 
-      # Step 2: Download the Clash and V2Ray subscription files
+      # Step 2: Set up Git user identity for the GitHub Actions bot
+      - name: Set up Git user for GitHub Actions bot
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+      # Step 3: Download the Clash and V2Ray subscription files
       - name: Download Clash subscription
         run: |
           wget -qO clash.yaml "https://api-suc.0z.gs/sub?target=clash&url=https%3A%2F%2Fproxy.v2gh.com%2Fhttps%3A%2F%2Fraw.githubusercontent.com%2FPawdroid%2FFree-servers%2Fmain%2Fsub"
@@ -25,7 +31,7 @@ jobs:
         run: |
           wget -qO v2ray.txt "https://api-suc.0z.gs/sub?target=v2ray&url=https%3A%2F%2Fproxy.v2gh.com%2Fhttps%3A%2F%2Fraw.githubusercontent.com%2FPawdroid%2FFree-servers%2Fmain%2Fsub"
 
-      # Step 3: Filter the valid Clash links
+      # Step 4: Filter the valid Clash links
       - name: Filter valid Clash links
         run: |
           # Create a new file to store valid URLs
@@ -39,7 +45,7 @@ jobs:
             fi
           done
 
-      # Step 4: Filter the valid V2Ray links
+      # Step 5: Filter the valid V2Ray links
       - name: Filter valid V2Ray links
         run: |
           # Create a new file to store valid URLs
@@ -53,7 +59,7 @@ jobs:
             fi
           done
 
-      # Step 5: Commit the filtered files to the repository
+      # Step 6: Commit the filtered files to the repository
       - name: Commit filtered URLs
         run: |
           echo "Updating the filtered configuration files"
