@@ -101,7 +101,9 @@ class BsbbCrawler:
                 data = json.loads(decoded_data)
                 host = data.get("add", "")
                 port = data.get("port", "")
-                return host, port
+                # 重新编码成base64格式
+                encoded_data = base64.b64encode(json.dumps(data).encode('utf-8')).decode('utf-8')
+                return host, port, encoded_data
             else:
                 # 其他协议类型
                 if "?" in node_line:
@@ -112,10 +114,10 @@ class BsbbCrawler:
                 host_port = url_part.split("@")[-1].split(":")
                 host = host_port[0] if len(host_port) > 0 else ""
                 port = host_port[1] if len(host_port) > 1 else ""
-                return host, port
+                return host, port, node_line
         except Exception as e:
             # 不显示错误信息，避免干扰
-            return "", ""
+            return "", "", ""
 
     def crawl(self):
         """执行爬取任务"""
@@ -157,7 +159,11 @@ class BsbbCrawler:
         
         with open(filename, "w", encoding="utf-8") as f:
             for node in filtered_nodes:
-                f.write(f"{node['raw']}\n")
+                # 对每个节点进行base64编码
+                if node['protocol'] == "vmess":
+                    f.write(f"vmess://{node['raw']}\n")
+                else:
+                    f.write(f"{node['raw']}\n")
         print(f"指定国家的节点信息已保存到 {filename}，共 {len(filtered_nodes)} 个节点")
 
 if __name__ == "__main__":
