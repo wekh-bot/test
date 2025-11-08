@@ -28,7 +28,7 @@ jobs:
       # Step 4: 运行爬虫脚本
       - name: Run crawler and filter nodes
         run: |
-          cd .github/workflows  # 进入工作流文件夹
+          cd .github/workflows
           python filter_crawler.py
 
       # Step 5: 提交并推送更新
