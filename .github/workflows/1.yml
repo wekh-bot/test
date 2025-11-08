@@ -1,0 +1,64 @@
+name: Filter Subscription Links
+
+on:
+  push:
+    branches:
+      - main  # 这里确保没有语法问题，推送到主分支时触发
+  schedule:
+    - cron: '0 0 * * *'  # 每天自动运行一次
+
+jobs:
+  filter_links:
+    runs-on: ubuntu-latest  # 确保这个键值没有遗漏或语法问题
+    
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v3  # 确保这行正确使用了版本
+
+      # Step 2: Download the Clash and V2Ray subscription files
+      - name: Download Clash subscription
+        run: |
+          wget -qO clash.yaml "https://api-suc.0z.gs/sub?target=clash&url=https%3A%2F%2Fproxy.v2gh.com%2Fhttps%3A%2F%2Fraw.githubusercontent.com%2FPawdroid%2FFree-servers%2Fmain%2Fsub"
+
+      - name: Download V2Ray subscription
+        run: |
+          wget -qO v2ray.txt "https://api-suc.0z.gs/sub?target=v2ray&url=https%3A%2F%2Fproxy.v2gh.com%2Fhttps%3A%2F%2Fraw.githubusercontent.com%2FPawdroid%2FFree-servers%2Fmain%2Fsub"
+
+      # Step 3: Filter the valid Clash links
+      - name: Filter valid Clash links
+        run: |
+          # Create a new file to store valid URLs
+          touch valid_clash_urls.txt
+          # Extract URLs and check validity
+          grep -Eo 'http[s]?://[^\"]+' clash.yaml | while read -r url; do
+            if curl --head --silent --fail "$url" > /dev/null; then
+              echo "$url" >> valid_clash_urls.txt
+            else
+              echo "Invalid Clash URL: $url"
+            fi
+          done
+
+      # Step 4: Filter the valid V2Ray links
+      - name: Filter valid V2Ray links
+        run: |
+          # Create a new file to store valid URLs
+          touch valid_v2ray_urls.txt
+          # Extract URLs and check validity
+          grep -Eo 'http[s]?://[^\"]+' v2ray.txt | while read -r url; do
+            if curl --head --silent --fail "$url" > /dev/null; then
+              echo "$url" >> valid_v2ray_urls.txt
+            else
+              echo "Invalid V2Ray URL: $url"
+            fi
+          done
+
+      # Step 5: Commit the filtered files to the repository
+      - name: Commit filtered URLs
+        run: |
+          echo "Updating the filtered configuration files"
+          mv valid_clash_urls.txt clash.yaml
+          mv valid_v2ray_urls.txt v2ray.txt
+          git add clash.yaml v2ray.txt
+          git commit -m "Updated subscription files with valid links only"
+          git push
