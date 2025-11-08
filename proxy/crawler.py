@@ -39,7 +39,7 @@ class BsbbCrawler:
     def fetch_node_data(self):
         """获取节点数据"""
         try:
-            response = urllib.请求.urlopen(self.node_file_url, timeout=10)
+            response = urllib.request.urlopen(self.node_file_url, timeout=10)
             data = response.read().decode('utf-8')
             return data.strip().split('\n')
         except Exception as e:
@@ -48,24 +48,15 @@ class BsbbCrawler:
 
     def parse_node(self, node_line):
         """解析单个节点信息"""
-        # 提取协议类型
         protocol_match = re.match(r'([^:]+)://', node_line)
         if not protocol_match:
             return None
-            
         protocol = protocol_match.group(1).lower()
-        
-        # 提取备注信息（包含国家和延迟）
         remark_match = re.search(r'#(.+)$', node_line)
         remark = remark_match.group(1) if remark_match else ""
-        
-        # 提取国家代码和延迟
-        # 从备注中提取国家代码（例如：🇺🇸 www.bsbb.cc vless-US 87ms）
         country_emoji_match = re.search(r'^([\U0001F1E6-\U0001F1FF]{2})', remark)
         country_code_match = re.search(r'([A-Z]{2})\s*www\.bsbb\.cc\s*[a-zA-Z]+-([A-Z]{2})', remark)
         latency_match = re.search(r'(\d+)ms$', remark)
-        
-        # 优先使用emoji中的国家代码，如果没有则使用原来的提取方式
         if country_emoji_match:
             country_emoji = country_emoji_match.group(1)
             country_code = emoji_to_country.get(country_emoji, "未知")
@@ -73,12 +64,8 @@ class BsbbCrawler:
             country_code = country_code_match.group(2)
         else:
             country_code = "未知"
-            
         latency = int(latency_match.group(1)) if latency_match else None
-        
-        # 提取主机和端口
         host, port = self.extract_host_port(node_line, protocol)
-        
         return {
             "protocol": protocol,
             "country_code": country_code,
@@ -92,49 +79,39 @@ class BsbbCrawler:
         """从节点链接中提取主机和端口"""
         try:
             if protocol == "vmess":
-                # Vmess节点需要base64解码
-                encoded_data = node_line[8:]  # 去掉"vmess://"
-                # 添加缺少的填充字符
+                encoded_data = node_line[8:]
                 missing_padding = len(encoded_data) % 4
                 if missing_padding:
                     encoded_data += '=' * (4 - missing_padding)
-                
-                # 处理非ASCII字符
                 decoded_data = base64.b64decode(encoded_data.encode('ascii')).decode('utf-8')
                 data = json.loads(decoded_data)
                 host = data.get("add", "")
                 port = data.get("port", "")
                 return host, port
             else:
-                # 其他协议类型
                 if "?" in node_line:
                     url_part = node_line.split("?")[0]
                 else:
                     url_part = node_line.split("#")[0]
-                
                 host_port = url_part.split("@")[-1].split(":")
                 host = host_port[0] if len(host_port) > 0 else ""
                 port = host_port[1] if len(host_port) > 1 else ""
                 return host, port
-        except Exception as e:
-            # 不显示错误信息，避免干扰
+        except Exception:
             return "", ""
 
     def crawl(self):
         """执行爬取任务"""
         print("开始爬取 www.bsbb.cc 节点信息...")
         node_lines = self.fetch_node_data()
-        
         if not node_lines:
             print("未能获取到节点数据")
             return
-        
         for line in node_lines:
             if line.strip():
                 node_info = self.parse_node(line.strip())
                 if node_info:
                     self.nodes.append(node_info)
-        
         print(f"爬取完成，共获取到 {len(self.nodes)} 个节点信息")
         return self.nodes
 
@@ -143,47 +120,34 @@ class BsbbCrawler:
         if not self.nodes:
             print("没有节点数据可供分析")
             return
-        
-        # 仅统计目标国家的节点数
         country_count = {country: 0 for country in TARGET_COUNTRIES}
         for node in self.nodes:
             country = node['country_code']
             if country in TARGET_COUNTRIES:
                 country_count[country] += 1
-            
-        # 打印简洁的统计信息
         print(f"\n目标国家节点统计:")
         for country in TARGET_COUNTRIES:
             print(f"{country_code_to_name[country]}: {country_count[country]} 个节点")
-        
         return country_count
 
-    def save_to_file(self, filename="nodes.txt"):
+    def save_to_file(self, filename="proxy/v2ray.txt"):
         """只保存香港、美国、日本节点，每个国家最多10个"""
-        country_limits = {c: 0 for c in TARGET_COUNTRIES}  # 记录每个国家保存的节点数
-        max_per_country = 10  # 每个国家最多10个节点
-
-        filtered_nodes = []  # 用于保存符合条件的节点
+        country_limits = {c: 0 for c in TARGET_COUNTRIES}
+        max_per_country = 10
+        filtered_nodes = []
         for node in self.nodes:
             cc = node['country_code']
-            # 如果节点属于目标国家且该国家节点数未超过10个，则保存该节点
             if cc in TARGET_COUNTRIES and country_limits[cc] < max_per_country:
                 filtered_nodes.append(node['raw'])
                 country_limits[cc] += 1
-
-        # 将符合条件的节点写入文件
         with open(filename, "w", encoding="utf-8") as f:
             for raw in filtered_nodes:
                 f.write(raw + "\n")
-
-        # 输出简洁的保存信息
         print(f"已保存 {len(filtered_nodes)} 个节点（{', '.join(TARGET_COUNTRIES)} 各最多10个）到 {filename}")
 
 if __name__ == "__main__":
     crawler = BsbbCrawler()
     nodes = crawler.crawl()
     if nodes:
-        # 分析节点信息
         country_count = crawler.analyze_nodes()
-        # 保存去重后的节点信息
-        crawler.save_to_file()
+        crawler.save_to_file("proxy/v2ray.txt")
