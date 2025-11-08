@@ -16,8 +16,8 @@ emoji_to_country = {
     '🇫🇮': 'FI', '🇷🇴': 'RO', '🇧🇪': 'BE'
 }
 
-# 目标国家：美国、日本、香港
-TARGET_COUNTRIES = ["US", "JP", "HK"]
+# 目标国家：香港（HK）、美国（US）、日本（JP）
+TARGET_COUNTRIES = ["HK", "US", "JP"]
 
 # 国家代码到中文名称的映射
 country_code_to_name = {
@@ -140,7 +140,7 @@ class BsbbCrawler:
         return self.nodes
 
     def filter_nodes(self):
-        """筛选指定地区的节点，每个地区最多保留10个"""
+        """筛选指定地区的节点，每个地区最多保留10个，并排序"""
         filtered = []
         for country in TARGET_COUNTRIES:
             # 筛选出特定国家的节点
@@ -154,7 +154,16 @@ class BsbbCrawler:
 
         self.nodes = filtered
         print(f"筛选后共 {len(filtered)} 个节点")
-    
+
+        # 按照指定顺序排序：香港 > 美国 > 日本
+        ordered_nodes = []
+        for country in TARGET_COUNTRIES:
+            country_nodes = [node for node in self.nodes if node["country_code"] == country]
+            ordered_nodes.extend(country_nodes)
+        
+        self.nodes = ordered_nodes
+        print(f"节点排序完成，共 {len(self.nodes)} 个节点")
+
     def save_to_file(self, filename="v2ray.txt"):
         """保存节点信息到文件（去重后）"""
         unique_nodes = list(set(node['raw'] for node in self.nodes))
