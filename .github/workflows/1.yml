@@ -3,7 +3,7 @@ name: 🕷️ Node Crawler & Filter (Auto Update)
 on:
   schedule:
     - cron: '0 */6 * * *'  # 每6小时自动运行一次
-  workflow_dispatch:  # 可手动触发
+  workflow_dispatch:  # 支持手动触发
 
 jobs:
   run-crawler:
@@ -26,21 +26,22 @@ jobs:
 
       - name: Run crawler and filter nodes
         run: |
-          cd node-sp
+          cd .github/workflows
           python filter_crawler.py
 
       - name: Encode output and save as config.txt
         run: |
-          cd node-sp
-          base64 -w 0 filtered_nodes.txt > ../config.txt
+          cd .github/workflows
+          base64 -w 0 filtered_nodes.txt > ../../config.txt
 
       - name: Commit and push changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add config.txt node-sp/filtered_nodes.txt
+          git add ../../config.txt .github/workflows/filtered_nodes.txt || true
           git commit -m "🤖 Auto-update filtered_nodes.txt & config.txt" || echo "No changes to commit"
-          git push origin main
+          git push origin main || echo "No changes to push"
+        continue-on-error: true
 
   cleanup-runs:
     needs: run-crawler
