@@ -3,7 +3,7 @@ name: 🕷️ Node Crawler & Filter (Auto Update)
 on:
   schedule:
     - cron: '0 */6 * * *'  # 每6小时自动运行一次
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:  # 支持手动触发
 
 jobs:
   run-crawler:
@@ -31,13 +31,13 @@ jobs:
           cd .github/workflows
           python filter_crawler.py
 
-      # Step 5: 将输出文件编码为 Base64
+      # Step 5: 将结果文件转为 Base64
       - name: Encode output and save as config.txt
         run: |
           cd .github/workflows
           base64 -w 0 filtered_nodes.txt > ../../config.txt
 
-      # Step 6: 提交和推送结果
+      # Step 6: 提交更新
       - name: Commit and push changes
         run: |
           git config --global user.name "github-actions[bot]"
@@ -46,18 +46,3 @@ jobs:
           git commit -m "🤖 Auto-update filtered_nodes.txt & config.txt" || echo "No changes to commit"
           git push origin main || echo "No changes to push"
         continue-on-error: true
-
-  cleanup-runs:
-    needs: run-crawler
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-      contents: read
-    steps:
-      - name: Delete old workflow runs
-        uses: Mattraks/delete-workflow-runs@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.repository }}
-          retain_days: 0
-          keep_minimum_runs: 4
